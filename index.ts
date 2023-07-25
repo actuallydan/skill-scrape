@@ -3,7 +3,7 @@ import fs from "fs";
 import fetch from "isomorphic-fetch";
 
 async function getSkills(keyword: string): Promise<any> {
-  return fetch(`https://www.linkedin.com/voyager/api/graphql?variables=(keywords:${keyword},query:(typeaheadFilterQuery:()),type:SKILL)&&queryId=voyagerSearchDashReusableTypeahead.1043b2d44b336397a7560ac3243a89a0`, {
+  return fetch(`https://www.linkedin.com/voyager/api/graphql?variables=(keywords:${keyword},query:(typeaheadFilterQuery:()),type:SKILL,count:100)&&queryId=voyagerSearchDashReusableTypeahead.1043b2d44b336397a7560ac3243a89a0`, {
     "headers": {
       "accept": "application/vnd.linkedin.normalized+json+2.1",
       "accept-language": "en-US,en;q=0.9",
@@ -79,31 +79,39 @@ function generateCombinations(n: number) {
   return combinations;
 }
 
-// start at 49150 (cvvx for latest set)
+// start at 252377 (nihv for latest set)
 (async function () {
-  const concurrency = 5; // Adjust the concurrency level as needed
-  const searchTerms = generateCombinations(4); // Generate combinations up to length 4
+  const concurrency = 4; // Adjust the concurrency level as needed
+  const searchTerms = generateCombinations(3); // Generate combinations up to length 4
 
-  for (let i = 68190; i < searchTerms.length; i += concurrency) {
+  const searchTermsLength = searchTerms.length;
+
+  for (let i = 0; i < searchTermsLength; i += concurrency) {
    try { 
     const batchTerms = searchTerms.slice(i, i + concurrency);
     const promises = batchTerms.map((term) => getSkills(term));
     const results = await Promise.all(promises);
 
     let skills = [];
+    let data: LinkedInSkillsResult | null = null;
 
+    let skillsToAdd = [];
     // Process the results as needed
     for (const result of results) {
-      const data: LinkedInSkillsResult = await result.json();
+      data = await result.json();
       skills = data.data.data.searchDashReusableTypeaheadByType.elements.map(n => n.title.text)
 
       if (skills && skills.length > 0) {
-        fs.appendFileSync("skills_results.txt", skills.join(",,") + ",,");
-
-        console.log(`processed terms for ${batchTerms[0]} - ${batchTerms[batchTerms.length - 1]}`)
-
+        skillsToAdd = skillsToAdd.concat(skills)
       }
-    }} catch (err) {
+    }
+
+    if (skillsToAdd && skillsToAdd.length > 0) {
+      fs.appendFileSync("skills_results.txt", skillsToAdd.join(",,") + ",,");
+      skillsToAdd = [];
+      console.log(`processed terms for ${batchTerms[0]} - ${batchTerms[batchTerms.length - 1]}`)
+    }
+  } catch (err) {
       console.error(err);
       // wait a bit and try again
       await sleep(2000);
